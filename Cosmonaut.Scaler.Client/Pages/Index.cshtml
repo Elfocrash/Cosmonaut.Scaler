@@ -1,0 +1,242 @@
+﻿@page "/"
+@using Cosmonaut.Scaler.Shared
+@using Cosmonaut.Scaler.Shared.Contracts
+@using Microsoft.AspNetCore.Components
+@inject HttpClient HttpClient
+
+<div class="container-fluid">
+
+    <!-- Page Heading -->
+    <div class="d-sm-flex align-items-center justify-content-between mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Cosmos DB Accounts</h1>
+    </div>
+
+    @if (_accounts != null)
+    {
+        <div class="row">
+            @foreach (var account in _accounts)
+            {
+                <div class="col-xl-3 col-md-6 mb-4">
+                    <div class="card border-left-primary shadow h-100 py-2">
+                        <div class="card-body clickable" onclick="@(action => LoadDatabaseView(account.ServiceUrl))">
+                            <div class="row no-gutters align-items-center">
+                                <div class="col mr-2">
+                                    <div class="text-xs font-weight-bold text-primary mb-1">@account.ServiceUrl</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">@account.TotalThroughput Total RUs</div>
+                                    <div class="h6 mb-0 font-weight-bold text-gray-800">Average Cost Per Month: $@CosmosChargeCalculator.GetAverageMonthlyCharge(account.TotalThroughput)</div>
+                                </div>
+                                <div class="col-auto">
+                                    <i class="fas fa-database fa-2x text-gray-300"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+            <div class="col-xl-3 col-md-6 mb-4">
+                <div class="card border-left-success shadow h-100 py-2">
+                    <div class="card-body clickable" data-toggle="modal" data-target="#addAccountModal">
+                        <div class="row no-gutters align-items-center">
+                            <div class="col mr-2">
+                                <div class="text-x font-weight-bold text-success mb-1">Add new Cosmos DB Account</div>
+                            </div>
+                            <div class="col-auto">
+                                <i class="fas fa-plus-circle fa-2x text-gray-300"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        if (_selectedDatabases != null)
+        {
+            <div class="row">
+                <div class="col-xl-12 col-lg-12">
+                    <div class="card shadow mb-4">
+                        <!-- Card Header - Dropdown -->
+                        <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                            <h6 class="m-0 font-weight-bold text-primary">Scale Management - @selectedDatabaseUri</h6>
+                        </div>
+                        <!-- Card Body -->
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                                    <thead>
+                                        <tr>
+                                            <th>Entity Type</th>
+                                            <th>Id</th>
+                                            <th>Current Throughput</th>
+                                            <th>Daily cost / Monthly cost</th>
+                                            <th>Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var database in _selectedDatabases)
+                                        {
+                                            <tr>
+                                                <td><i class="fas fa-database"></i> Database</td>
+                                                <td>@database.Id</td>
+                                                @if (database.HasOffer)
+                                                {
+                                                    <td class="form-inline">
+                                                        <input step="100" min="400" max="1000000" type="number" bind="@database.Offer.Throughput" value="@database.Offer.Throughput" class="form-control form-control-sm col-sm-3 mr-sm-2" /> RU/s shared across @(database.Collections.Count(x => !x.HasOffer) + " collections")
+                                                    </td>
+                                                    <td>$@(CosmosChargeCalculator.GetEstimatedDailyCharge(database.Offer.Throughput)) / $@(CosmosChargeCalculator.GetAverageMonthlyCharge(database.Offer.Throughput))</td>
+                                                    <td>
+                                                        <button type="button" class="btn btn-primary btn-sm" onclick="@(async () => await UpdateOffer(database.Offer.Id, database.Offer.Throughput))">Update Throughput</button>
+                                                    </td>
+                                                }
+                                                else
+                                                {
+                                                    <td>Collection level throughput</td>
+                                                    <td>N/A</td>
+                                                    <td>Unavailable</td>
+                                                }
+
+                                            </tr>
+
+                                            foreach (var collection in database.Collections)
+                                            {
+                                                <tr>
+                                                    <td><i class="fas fa-book"></i> Collection</td>
+                                                    <td>@collection.Id</td>
+                                                    @if (collection.HasOffer)
+                                                    {
+                                                        if (database.HasOffer)
+                                                        {
+                                                            <td class="form-inline">
+                                                                <input step="100" min="400" max="1000000" type="number" bind="@collection.Offer.Throughput" value="@collection.Offer.Throughput" class="form-control form-control-sm col-sm-3 mr-sm-2"/> Dedicated RU/s
+                                                            </td>
+                                                            <td>$@(CosmosChargeCalculator.GetEstimatedDailyCharge(collection.Offer.Throughput)) / $@(CosmosChargeCalculator.GetAverageMonthlyCharge(collection.Offer.Throughput))</td>
+                                                        }
+                                                        else
+                                                        {
+                                                            <td class="form-inline">
+                                                                <input step="100" min="400" max="1000000" type="number" bind="@collection.Offer.Throughput" value="@collection.Offer.Throughput" class="form-control form-control-sm col-sm-3 mr-sm-2"/> RU/s
+                                                            </td>
+                                                            <td>$@(CosmosChargeCalculator.GetEstimatedDailyCharge(collection.Offer.Throughput)) / $@(CosmosChargeCalculator.GetAverageMonthlyCharge(collection.Offer.Throughput))</td>
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        <td>N/A</td>
+                                                        <td>Uses parent database's throughput.</td>
+                                                    }
+                                                    
+                                                    @if (collection.HasOffer)
+                                                    {
+                                                        <td>
+                                                            <button type="button" class="btn btn-primary btn-sm" onclick="@(async () => await UpdateOffer(collection.Offer.Id, collection.Offer.Throughput))">Update Throughput</button>
+                                                        </td>
+                                                    }
+                                                    else
+                                                    {
+                                                        <td>Unavailable</td>
+                                                    }
+                                                    
+                                                </tr>
+                                            }
+                                            <br />
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+<div class="modal fade" id="addAccountModal" tabindex="-1" role="dialog" aria-labelledby="addAccountModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Add Cosmos DB Account</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body mx-3">
+                <div class="alert alert-danger" role="alert" style="@(_visibleError ? "display: block" : "display: none")">
+                    <strong>Oops!</strong> @_errorMessage
+                </div>
+                <div>
+                    <i class="fas fa-link"></i>
+                    <label data-error="wrong" data-success="right" for="addAccountUri">Cosmos DB Service Url</label>
+                    <input type="text" id="addAccountUri" class="form-control" bind=@AccountUri/>
+                </div>
+
+                <div>
+                    <i class="fas fa-lock"></i>
+                    <label data-error="wrong" data-success="right" for="addAccountKey">Master Key</label>
+                    <input type="text" id="addAccountKey" class="form-control" bind=@AccountKey/>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="@(async () => await AddNewCosmosAccount())">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+@functions
+{
+    List<CosmosDatabase> _selectedDatabases;
+    string selectedDatabaseUri = "";
+    bool _visibleError;
+    string _errorMessage = "";
+    string AccountUri = "";
+    string AccountKey = "";
+    public async Task AddNewCosmosAccount()
+    {
+        _visibleError = false;
+        var accountStatus = await HttpClient.PostJsonAsync<StatusResponse>("api/cosmos/dbaccounts", new CosmosStatusRequest(AccountUri, AccountKey));
+
+        if (!accountStatus.IsSuccess)
+        {
+            _visibleError = true;
+            _errorMessage = accountStatus.ErrorMessage;
+            return;
+        }
+
+        await JSRuntime.Current.InvokeAsync<bool>("closeAddModal");
+        await LoadAccounts();
+    }
+
+    public async Task LoadDatabaseView(string databaseAccountUri)
+    {
+        selectedDatabaseUri = databaseAccountUri;
+        _selectedDatabases = _accounts.SingleOrDefault(x => x.ServiceUrl == databaseAccountUri)?.Databases;
+    }
+
+    public async Task UpdateOffer(string offerId, int throughput)
+    {
+        var response = await HttpClient.PostJsonAsync<OfferUpdateResponse>("api/cosmos/offers", new CosmosOfferUpdateRequest(selectedDatabaseUri, offerId, throughput));
+        if (response.IsSuccess)
+        {
+            await JSRuntime.Current.InvokeAsync<bool>("successToast", response.Message);
+        }
+        else
+        {
+            await JSRuntime.Current.InvokeAsync<bool>("failureToast", response.Message);
+        }
+    }
+
+    List<CosmosDatabaseAccount> _accounts;
+
+    protected override async Task OnInitAsync()
+    {
+        await LoadAccounts();
+    }
+
+    public async Task LoadAccounts()
+    {
+        _accounts = await HttpClient.GetJsonAsync<List<CosmosDatabaseAccount>>("api/cosmos");
+    }
+}

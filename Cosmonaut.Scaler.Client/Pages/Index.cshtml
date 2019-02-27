@@ -205,8 +205,8 @@
             return;
         }
 
-        await JSRuntime.Current.InvokeAsync<bool>("closeAddModal");
         await LoadAccounts();
+        await JSRuntime.Current.InvokeAsync<bool>("closeAddModal");
     }
 
     public async Task LoadDatabaseView(string databaseAccountUri)
@@ -238,5 +238,6 @@
     public async Task LoadAccounts()
     {
         _accounts = await HttpClient.GetJsonAsync<List<CosmosDatabaseAccount>>("api/cosmos");
+        this.StateHasChanged();
     }
 }

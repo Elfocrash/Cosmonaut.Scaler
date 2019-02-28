@@ -207,6 +207,8 @@
 
         await LoadAccounts();
         await JSRuntime.Current.InvokeAsync<bool>("closeAddModal");
+        AccountUri = "";
+        AccountKey = "";
     }
 
     public async Task LoadDatabaseView(string databaseAccountUri)
